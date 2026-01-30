@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Panorama Labels</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #222;
+            color: #fff;
+        }
+
+        #panorama {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Overlay UI */
+        .overlay-ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(30, 30, 30, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            width: 300px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .overlay-ui h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+            color: #4da6ff;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            background: #555;
+            border-color: #888;
+        }
+
+        .btn-primary {
+            background: #0078d4;
+            border-color: #0078d4;
+        }
+
+        .btn-primary:hover {
+            background: #106ebe;
+        }
+
+        .btn-danger {
+            background: #d13438;
+            border-color: #d13438;
+        }
+
+        .btn-danger:hover {
+            background: #a4262c;
+        }
+
+        /* Editor Modal */
+        #editor-panel {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #555;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+
+        /* Hotspot Styling */
+        .custom-hotspot {
+            width: 30px;
+            height: 30px;
+            background: rgba(0, 120, 212, 0.6);
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 100;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .custom-hotspot:hover {
+            transform: scale(1.2);
+            background: rgba(0, 120, 212, 0.9);
+        }
+
+        .custom-hotspot.selected {
+            background: #d13438;
+            box-shadow: 0 0 0 4px rgba(209, 52, 56, 0.3);
+        }
+
+        .hotspot-label {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        #save-status {
+            margin-top: 10px;
+            font-size: 12px;
+            text-align: center;
+            height: 18px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="panorama"></div>
+
+    <div class="overlay-ui">
+        <h2>✏️ Editor Mode</h2>
+        <div class="controls">
+            <p style="font-size: 13px; color: #ccc; margin-bottom: 5px;">
+                Click anywhere on the image to add a label. Click a label to edit it.
+            </p>
+            <div id="editor-panel">
+                <div class="form-group">
+                    <label>Label Text</label>
+                    <input type="text" id="label-input" placeholder="Building Name">
+                </div>
+                <div class="controls" style="flex-direction: row;">
+                    <button class="btn btn-primary" style="flex: 1;" onclick="applyLabelEdit()">Update</button>
+                    <button class="btn btn-danger" style="flex: 1;" onclick="deleteSelectedLabel()">Delete</button>
+                </div>
+            </div>
+
+            <div style="margin-top: 15px; border-top: 1px solid #555; padding-top: 15px; display: flex; gap: 10px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="saveData()">💾 Save All</button>
+                <a href="/view/{{ id }}" class="btn" style="flex: 1;">Back to View</a>
+            </div>
+            <div id="save-status"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    <script>
+        // Redirect to home if page is reloaded
+        if (performance.getEntriesByType("navigation")[0]?.type === "reload" || performance.navigation.type === 1) {
+            window.location.href = "/";
+        }
+
+        const PANORAMA_IMAGE = "{{ url_for('static', filename='processed/' + id + '.jpg') }}";
+        const DATA_URL = "/api/data/{{ id }}";
+        const SAVE_URL = "/api/save/{{ id }}";
+
+        let viewer = null;
+        let hotspots = [];
+        let selectedHotspotId = null;
+
+        // Fetch initial data
+        fetch(DATA_URL)
+            .then(response => response.json())
+            .then(data => {
+                // Ensure every hotspot has a unique ID for editing
+                hotspots = data.map((h, index) => ({
+                    ...h,
+                    id: h.id || 'new_' + Date.now() + '_' + index
+                }));
+                initViewer();
+            })
+            .catch(err => {
+                console.warn('Error fetching data:', err);
+                hotspots = [];
+                initViewer();
+            });
+
+
+        let mouseDownPos = { x: 0, y: 0 };
+
+        function attachClickLogic(v) {
+            v.on('mousedown', function (event) {
+                mouseDownPos = { x: event.clientX, y: event.clientY };
+            });
+
+            v.on('mouseup', function (event) {
+                // Calculate distance moved
+                const dx = Math.abs(event.clientX - mouseDownPos.x);
+                const dy = Math.abs(event.clientY - mouseDownPos.y);
+
+                // If moved less than 5 pixels, treat as click
+                if (dx < 5 && dy < 5) {
+                    // Check if we are not clicking on a hotspot (handled by stopPropagation in hotspotNode)
+                    // But events propagate? No, we used stopPropagation.
+                    // However, we need to ensure we don't double trigger if a hotspot was clicked (captured there)
+
+                    const preClickId = selectedHotspotId;
+
+                    setTimeout(() => {
+                        // Only add if selection didn't change (meaning we clicked background)
+                        // and it was a left click (button 0)
+                        if (selectedHotspotId === preClickId && event.button === 0) {
+                            const coords = v.mouseEventToCoords(event);
+                            addNewLabel(coords[0], coords[1]);
+                        }
+                    }, 50);
+                }
+            });
+        }
+
+        function initViewer() {
+            viewer = pannellum.viewer('panorama', {
+                "type": "equirectangular",
+                "panorama": PANORAMA_IMAGE,
+                "autoLoad": true,
+                "hotSpots": renderHotspots(),
+                "showZoomCtrl": false,
+                "hfov": 100
+            });
+            attachClickLogic(viewer);
+        }
+
+
+        function renderHotspots() {
+            return hotspots.map(h => ({
+                "pitch": h.pitch,
+                "yaw": h.yaw,
+                "cssClass": (selectedHotspotId === h.id) ? "custom-hotspot selected" : "custom-hotspot",
+                "createTooltipFunc": hotspotNode,
+                "createTooltipArgs": { id: h.id, label: h.label },
+                "id": h.id // Custom prop helper
+            }));
+        }
+
+        function hotspotNode(hotSpotDiv, args) {
+            hotSpotDiv.classList.add('custom-hotspot');
+            if (selectedHotspotId === args.id) {
+                hotSpotDiv.classList.add('selected');
+            }
+
+            hotSpotDiv.innerHTML = `<span class="hotspot-label">${args.label}</span>`;
+
+            hotSpotDiv.onclick = function (e) {
+                e.stopPropagation(); // Stop viewer backdrop click
+                selectLabel(args.id, args.label);
+            };
+        }
+
+        function refreshViewer() {
+            const yaw = viewer.getYaw();
+            const pitch = viewer.getPitch();
+            const hfov = viewer.getHfov();
+
+            viewer.destroy();
+            viewer = pannellum.viewer('panorama', {
+                "type": "equirectangular",
+                "panorama": PANORAMA_IMAGE,
+                "autoLoad": true,
+                "hotSpots": renderHotspots(),
+                "yaw": yaw,
+                "pitch": pitch,
+                "hfov": hfov,
+                "showZoomCtrl": false
+            });
+            attachClickLogic(viewer);
+        }
+
+        // --- Logic ---
+
+        function selectLabel(id, label) {
+            selectedHotspotId = id;
+            document.getElementById('editor-panel').style.display = 'block';
+            document.getElementById('label-input').value = label;
+            document.getElementById('label-input').focus();
+
+            // Visual refresh to highlight selected
+            refreshViewer();
+        }
+
+        function addNewLabel(pitch, yaw) {
+            const newId = 'manual_' + Date.now();
+            const newLabel = {
+                id: newId,
+                label: "New Label",
+                pitch: pitch,
+                yaw: yaw,
+                // Optional: add x_norm/y_norm if needed later, but yaw/pitch is enough for display
+                y_norm: 0, x_norm: 0
+            };
+
+            hotspots.push(newLabel);
+            selectLabel(newId, "New Label");
+        }
+
+        function applyLabelEdit() {
+            if (!selectedHotspotId) return;
+
+            const newText = document.getElementById('label-input').value;
+            const idx = hotspots.findIndex(h => h.id === selectedHotspotId);
+            if (idx !== -1) {
+                hotspots[idx].label = newText;
+            }
+            // Deselect and refresh
+            selectedHotspotId = null;
+            document.getElementById('editor-panel').style.display = 'none';
+            refreshViewer();
+        }
+
+        function deleteSelectedLabel() {
+            if (!selectedHotspotId) return;
+
+            if (confirm("Delete this label?")) {
+                hotspots = hotspots.filter(h => h.id !== selectedHotspotId);
+                selectedHotspotId = null;
+                document.getElementById('editor-panel').style.display = 'none';
+                refreshViewer();
+            }
+        }
+
+        function saveData() {
+            const statusEl = document.getElementById('save-status');
+            statusEl.textContent = "Saving...";
+            statusEl.style.color = "#aaa";
+
+            fetch(SAVE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(hotspots)
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        statusEl.textContent = "Saved successfully!";
+                        statusEl.style.color = "#4bb543";
+                        setTimeout(() => { statusEl.textContent = ""; }, 3000);
+                    } else {
+                        statusEl.textContent = "Error saving.";
+                        statusEl.style.color = "#d13438";
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    statusEl.textContent = "Network error.";
+                    statusEl.style.color = "#d13438";
+                });
+        }
+    </script>
+</body>
+
+</html>
