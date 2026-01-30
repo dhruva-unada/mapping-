@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° Panorama Viewer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #panorama {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .title {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            z-index: 1000;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            z-index: 1000;
+            font-size: 14px;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            z-index: 2000;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        /* Custom Hotspot Styling */
+        .custom-hotspot {
+            height: 0;
+            width: 0;
+            transition: opacity 0.4s ease;
+            opacity: 0.6;
+        }
+
+        @keyframes ripple-buzz {
+            0% {
+                transform: scale(1);
+                opacity: 0.8;
+                border-width: 2px;
+            }
+
+            100% {
+                transform: scale(2.2);
+                opacity: 0;
+                border-width: 0px;
+            }
+        }
+
+        .ripple {
+            position: absolute;
+            left: -12px;
+            top: -12px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.9);
+            box-sizing: border-box;
+            z-index: 90;
+            animation: ripple-buzz 2s infinite ease-out;
+            pointer-events: none;
+            will-change: transform, opacity;
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            background-image: url("{{ url_for('static', filename='building_icon.png') }}");
+            background-size: 140%;
+            background-repeat: no-repeat;
+            background-position: center;
+            position: absolute;
+            left: -12px;
+            top: -12px;
+            border-radius: 50%;
+            border: 1.5px solid white;
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .line {
+            width: 2px;
+            height: 80px;
+            background: black;
+            position: absolute;
+            left: -1px;
+            bottom: 12px;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            z-index: 95;
+        }
+
+        .label-box {
+            position: absolute;
+            bottom: 90px;
+            left: 5px;
+            background: rgba(0, 30, 60, 0.9);
+            color: white;
+            padding: 8px 15px;
+            font-family: 'Georgia', serif;
+            font-size: 16px;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* ACTIVE STATE */
+        .custom-hotspot.active {
+            opacity: 1;
+            z-index: 1000;
+        }
+
+        .custom-hotspot.active .label-box {
+            opacity: 1;
+        }
+
+        .custom-hotspot.active .line {
+            opacity: 1;
+        }
+
+        .custom-hotspot.active .icon {
+            transform: scale(1.2);
+            transition: transform 0.3s;
+        }
+
+        /* UI Controls */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: 1px solid white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: white;
+            color: black;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="title">🏢 360° Building Detection Viewer</div>
+    <div class="instructions">🖱️ Drag to look around | 🔍 Scroll to zoom</div>
+    <div id="loading">Loading High-Res Panorama...</div>
+    <div id="panorama"></div>
+
+    <div class="controls">
+        <a href="/download/{{ id }}" class="btn">💾 Save (Download HTML)</a>
+        <a href="/edit/{{ id }}" class="btn">✏️ Edit Labels</a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    <script>
+        const PANORAMA_IMAGE = "{{ url_for('static', filename='processed/' + id + '.jpg') }}";
+        const DATA_URL = "/api/data/{{ id }}";
+        let viewer = null;
+        let hotspots = [];
+
+        fetch(DATA_URL)
+            .then(response => response.json())
+            .then(data => { initViewer(data); })
+            .catch(err => { console.warn('Error:', err); initViewer([]); });
+
+        function initViewer(hotspotsData) {
+            const img = new Image();
+            img.onload = function () {
+                document.getElementById('loading').style.display = 'none';
+                hotspots = hotspotsData;
+
+                const p_hotspots = hotspotsData.map(point => {
+                    return {
+                        "pitch": point.pitch,
+                        "yaw": point.yaw,
+                        "cssClass": "custom-hotspot",
+                        "createTooltipFunc": hotspotNode,
+                        "createTooltipArgs": { label: point.label, id: point.id }
+                    };
+                });
+
+                viewer = pannellum.viewer('panorama', {
+                    "type": "equirectangular",
+                    "panorama": PANORAMA_IMAGE,
+                    "autoLoad": true,
+                    "hfov": 100,
+                    "minHfov": 50,
+                    "maxHfov": 120,
+                    "hotSpots": p_hotspots,
+                    "maxWidth": img.width,
+                    "maxHeight": img.height
+                });
+
+                viewer.on('mouseup', updateActiveHotspots);
+                viewer.on('mousedown', updateActiveHotspots);
+                viewer.on('moveend', updateActiveHotspots);
+                viewer.on('zoomchange', updateActiveHotspots);
+                setInterval(updateActiveHotspots, 100);
+            };
+            img.src = PANORAMA_IMAGE;
+        }
+
+        function hotspotNode(hotSpotDiv, args) {
+            hotSpotDiv.classList.add('custom-hotspot');
+            hotSpotDiv.id = 'hs-' + args.id;
+            hotSpotDiv.innerHTML = `
+                <div class="ripple"></div>
+                <div class="icon"></div>
+                <div class="line"></div>
+                <div class="label-box">${args.label}</div>
+            `;
+        }
+
+        function updateActiveHotspots() {
+            if (!viewer) return;
+            const yaw = viewer.getYaw();
+            const pitch = viewer.getPitch();
+
+            hotspots.forEach(hs => {
+                let dy = Math.abs(hs.pitch - pitch);
+                let dx = Math.abs(hs.yaw - yaw);
+                if (dx > 180) dx = 360 - dx;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const el = document.getElementById('hs-' + hs.id);
+                if (el) {
+                    if (dist < 20) el.classList.add('active');
+                    else el.classList.remove('active');
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
