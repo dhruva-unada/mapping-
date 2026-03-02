@@ -273,6 +273,9 @@
         }
 
 
+        let isDragging = false;
+        let dragTargetId = null;
+
         function renderHotspots() {
             return hotspots.map(h => ({
                 "pitch": h.pitch,
@@ -292,29 +295,78 @@
 
             hotSpotDiv.innerHTML = `<span class="hotspot-label">${args.label}</span>`;
 
+            // Drag start
+            hotSpotDiv.onmousedown = function (e) {
+                if (e.button !== 0) return; // Left click only
+                e.stopPropagation();
+                isDragging = true;
+                dragTargetId = args.id;
+                selectLabel(args.id, args.label);
+                viewer.getConfig().mouseZoom = false; // Disable zoom while dragging
+            };
+
             hotSpotDiv.onclick = function (e) {
                 e.stopPropagation(); // Stop viewer backdrop click
                 selectLabel(args.id, args.label);
             };
         }
 
-        function refreshViewer() {
-            const yaw = viewer.getYaw();
-            const pitch = viewer.getPitch();
-            const hfov = viewer.getHfov();
+        // Window level listeners for smooth dragging
+        window.addEventListener('mousemove', function (e) {
+            if (!isDragging || !dragTargetId) return;
 
-            viewer.destroy();
-            viewer = pannellum.viewer('panorama', {
-                "type": "equirectangular",
-                "panorama": PANORAMA_IMAGE,
-                "autoLoad": true,
-                "hotSpots": renderHotspots(),
-                "yaw": yaw,
-                "pitch": pitch,
-                "hfov": hfov,
-                "showZoomCtrl": false
+            const coords = viewer.mouseEventToCoords(e);
+            const pitch = coords[0];
+            const yaw = coords[1];
+
+            // Update local data
+            const idx = hotspots.findIndex(h => h.id === dragTargetId);
+            if (idx !== -1) {
+                hotspots[idx].pitch = pitch;
+                hotspots[idx].yaw = yaw;
+
+                // Update x_norm/y_norm
+                hotspots[idx].x_norm = Math.round(((parseFloat(yaw) + 180) / 360) * 1000);
+                hotspots[idx].y_norm = Math.round(((90 - parseFloat(pitch)) / 180) * 1000);
+
+                // Update viewer immediately for smooth visual
+                viewer.removeHotSpot(dragTargetId);
+                viewer.addHotSpot({
+                    "pitch": pitch,
+                    "yaw": yaw,
+                    "cssClass": (selectedHotspotId === dragTargetId) ? "custom-hotspot selected" : "custom-hotspot",
+                    "createTooltipFunc": hotspotNode,
+                    "createTooltipArgs": { id: dragTargetId, label: hotspots[idx].label },
+                    "id": dragTargetId
+                });
+            }
+        });
+
+        window.addEventListener('mouseup', function (e) {
+            if (isDragging) {
+                isDragging = false;
+                dragTargetId = null;
+                viewer.getConfig().mouseZoom = true;
+                refreshViewer(); // Clean refresh to sync everything
+            }
+        });
+
+        function refreshViewer() {
+            // Smooth refresh: instead of destroying viewer, just update the hotspots
+            if (!viewer) return;
+
+            // 1. Remove all current hotspots safely
+            // Pannellum's getHotSpots() returns the current active ones
+            const currentHotspots = viewer.getHotSpots();
+            currentHotspots.forEach(hs => {
+                viewer.removeHotSpot(hs.id);
             });
-            attachClickLogic(viewer);
+
+            // 2. Re-add from our local source of truth
+            const newHotSpots = renderHotspots();
+            newHotSpots.forEach(hs => {
+                viewer.addHotSpot(hs);
+            });
         }
 
         // --- Logic ---
@@ -331,13 +383,18 @@
 
         function addNewLabel(pitch, yaw) {
             const newId = 'manual_' + Date.now();
+
+            // Calculate normalized flat coordinates from spherical
+            const x_norm = Math.round(((parseFloat(yaw) + 180) / 360) * 1000);
+            const y_norm = Math.round(((90 - parseFloat(pitch)) / 180) * 1000);
+
             const newLabel = {
                 id: newId,
                 label: "New Label",
                 pitch: pitch,
                 yaw: yaw,
-                // Optional: add x_norm/y_norm if needed later, but yaw/pitch is enough for display
-                y_norm: 0, x_norm: 0
+                x_norm: x_norm,
+                y_norm: y_norm
             };
 
             hotspots.push(newLabel);

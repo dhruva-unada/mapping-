@@ -39,15 +39,14 @@
 
         .instructions {
             position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 75px;
+            left: 20px;
             background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
+            color: #ccc;
+            padding: 8px 15px;
+            border-radius: 6px;
             z-index: 1000;
-            font-size: 14px;
+            font-size: 13px;
         }
 
         #loading {
@@ -200,6 +199,7 @@
 
     <div class="controls">
         <a href="/download/{{ id }}" class="btn">💾 Save (Download HTML)</a>
+        <a href="/download_json/{{ id }}" class="btn">📊 Download JSON</a>
         <a href="/edit/{{ id }}" class="btn">✏️ Edit Labels</a>
     </div>
 

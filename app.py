@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, make_response
 import os
 import uuid
 import json
 import shutil
+import base64
 from werkzeug.utils import secure_filename
 from detect import analyze_panorama
 
@@ -117,7 +118,7 @@ Sort by x (ascending).
     json_path = os.path.join(app.config['PROCESSED_FOLDER'], f"{file_id}.json")
     
     # Run AI
-    analyze_panorama(file_path, prompt, json_path)
+    # analyze_panorama(file_path, prompt, json_path)
     
     return redirect(url_for('view_panorama', id=file_id))
 
@@ -167,10 +168,37 @@ def download(id):
     else:
         hotspots_data = []
 
-    return render_template('viewer_standalone.html', 
-                          id=id, 
-                          hotspots_data=json.dumps(hotspots_data),
-                          base_url=request.url_root)
+    # Encode Panorama Image as Base64
+    img_path = os.path.join(app.config['PROCESSED_FOLDER'], f"{id}.jpg")
+    panorama_b64 = ""
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as image_file:
+            panorama_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+    
+    # Encode Building Icon as Base64
+    icon_path = os.path.join(app.root_path, 'static', 'building_icon.png')
+    icon_b64 = ""
+    if os.path.exists(icon_path):
+        with open(icon_path, "rb") as icon_file:
+            icon_b64 = base64.b64encode(icon_file.read()).decode('utf-8')
+
+    response_html = render_template('viewer_standalone.html', 
+                                   id=id, 
+                                   hotspots_data=json.dumps(hotspots_data),
+                                   panorama_b64=panorama_b64,
+                                   icon_b64=icon_b64,
+                                   base_url=request.url_root)
+    
+    response = make_response(response_html)
+    response.headers['Content-Disposition'] = f'attachment; filename=panorama_{id}.html'
+    return response
+
+@app.route('/download_json/<id>')
+def download_json(id):
+    json_path = os.path.join(app.config['PROCESSED_FOLDER'], f"{id}.json")
+    if os.path.exists(json_path):
+        return send_file(json_path, as_attachment=True, download_name=f"labels_{id}.json")
+    return jsonify({"error": "File not found"}), 404
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

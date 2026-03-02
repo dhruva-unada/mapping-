@@ -40,15 +40,14 @@
 
         .instructions {
             position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 75px;
+            left: 20px;
             background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
+            color: #ccc;
+            padding: 8px 15px;
+            border-radius: 6px;
             z-index: 1000;
-            font-size: 14px;
+            font-size: 13px;
         }
 
         #loading {
@@ -106,7 +105,7 @@
             /* Note: Ideally this would be base64, but we'll link to server asset if online, or break if offline. 
                For true standalone, we need base64. Let's assume for now user has internet or relative path. 
                Since it's a download, relativeness breaks. We'll use absolute URL to the server for now. */
-            background-image: url("{{ base_url }}static/building_icon.png");
+            background-image: url("data:image/png;base64,{{ icon_b64 }}");
             background-size: 140%;
             background-repeat: no-repeat;
             background-position: center;
@@ -177,9 +176,9 @@
     <script>
         // Embedded Data
         const HOTSPOTS_DATA = {{ hotspots_data | safe }};
-        const PANORAMA_IMAGE_URL = "{{ base_url }}static/processed/{{ id }}.jpg";
-        // Note: For true offline, image must be downloaded separately or encoded. 
-        // We will point to the hosted URL for simplicity in this version.
+        const PANORAMA_IMAGE_URL = "data:image/jpeg;base64,{{ panorama_b64 }}";
+        // Standalone file now embeds all data. 
+
 
         let viewer = null;
 
