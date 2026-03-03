@@ -126,6 +126,10 @@ Sort by x (ascending).
 def view_panorama(id):
     return render_template('viewer.html', id=id)
 
+@app.route('/share/<id>')
+def share_panorama(id):
+    return render_template('viewer.html', id=id, shared=True)
+
 @app.route('/edit/<id>')
 def edit_panorama(id):
     return render_template('editor.html', id=id)

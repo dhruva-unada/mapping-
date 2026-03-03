@@ -1,6 +1,6 @@
-flask
-werkzeug
-google-genai
-Pillow
-python-dotenv
-gunicorn
+flask==3.0.0
+werkzeug==3.1.4
+google-genai==1.54.0
+Pillow==12.0.0
+python-dotenv==1.0.0
+gunicorn==21.2.0

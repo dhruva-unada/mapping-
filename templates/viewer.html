@@ -192,19 +192,39 @@
 </head>
 
 <body>
+    {% if not shared %}
     <div class="title">🏢 360° Building Detection Viewer</div>
     <div class="instructions">🖱️ Drag to look around | 🔍 Scroll to zoom</div>
+    {% endif %}
     <div id="loading">Loading High-Res Panorama...</div>
     <div id="panorama"></div>
 
+    {% if not shared %}
     <div class="controls">
-        <a href="/download/{{ id }}" class="btn">💾 Save (Download HTML)</a>
-        <a href="/download_json/{{ id }}" class="btn">📊 Download JSON</a>
+        <button onclick="copyShareLink()" class="btn" id="shareBtn">🔗 Copy Share Link</button>
         <a href="/edit/{{ id }}" class="btn">✏️ Edit Labels</a>
+        <a href="/download_json/{{ id }}" class="btn">📊 Download JSON</a>
     </div>
+    {% endif %}
 
     <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
     <script>
+        function copyShareLink() {
+            const url = window.location.origin + "/share/{{ id }}";
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = document.getElementById('shareBtn');
+                if (!btn) return;
+                const originalText = btn.innerText;
+                btn.innerText = "✅ Link Copied!";
+                btn.style.background = "#28a745";
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = "rgba(0, 0, 0, 0.7)";
+                }, 2000);
+            }).catch(err => {
+                alert("Failed to copy link: " + err);
+            });
+        }
         // Redirect to home if page is reloaded
         if (performance.getEntriesByType("navigation")[0]?.type === "reload" || performance.navigation.type === 1) {
             window.location.href = "/";
